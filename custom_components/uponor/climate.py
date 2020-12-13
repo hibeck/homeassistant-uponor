@@ -45,6 +45,10 @@ class UponorClimate(ClimateEntity):
     @property
     def name(self):
         return self._name
+    
+    @property
+    def unique_id(self):
+        return self._name + '_thermostat_' + self._state_proxy.get_thermostat_serial(self._thermostat)
 
     @property
     def should_poll(self):
@@ -118,10 +122,17 @@ class UponorClimate(ClimateEntity):
 
     @property
     def device_state_attributes(self):
-        return {
-            'id': self._thermostat,
-            'status': self._state_proxy.get_status(self._thermostat)
-        }
+        at = {
+                'id': self._thermostat,
+                'serial': self._state_proxy.get_thermostat_serial(self._thermostat),
+                'status': self._state_proxy.get_status(self._thermostat),
+                'floor_sensor': self._state_proxy.get_regulation_mode(self._thermostat)
+            }
+        if self._state_proxy.get_regulation_mode(self._thermostat) == 1:
+            at['floor_temp'] = self._state_proxy.get_floor_temperature(self._thermostat)
+            at['min_floor_temp'] = self._state_proxy.get_min_floor_temperature(self._thermostat)
+            at['max_floor_temp'] = self._state_proxy.get_max_floor_temperature(self._thermostat)
+        return at;
 
     def set_temperature(self, **kwargs):
         temp = kwargs.get(ATTR_TEMPERATURE)

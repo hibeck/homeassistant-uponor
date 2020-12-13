@@ -57,14 +57,18 @@ async def async_setup(hass, config):
     state_proxy = await hass.async_add_executor_job(lambda: UponorStateProxy(hass, host, store))
     await state_proxy.async_update(0)
     thermostats = state_proxy.get_active_thermostats()
+    controller = state_proxy.get_controller_with_outdoortemp()
 
     hass.data[DOMAIN] = {
         "state_proxy": state_proxy,
         "names": names,
-        "thermostats": thermostats
+        "thermostats": thermostats,
+        "controllers_with_outdoortemp": controller 
     }
 
     hass.async_create_task(async_load_platform(hass, "climate", DOMAIN, {}, config))
+    hass.async_create_task(async_load_platform(hass, "sensor", DOMAIN, {}, config))
+
 
     async_track_time_interval(hass, state_proxy.async_update, SCAN_INTERVAL)
 
@@ -89,6 +93,27 @@ class UponorStateProxy:
                 if var in self._data and self._data[var] == "1":
                     active.append('C' + str(c) + '_T' + str(i))
         return active
+    
+    def get_controller_with_outdoortemp(self):
+        controller = []
+        for c in range(1, 5):
+            var = 'sys_controller_' + str(c) + '_presence'
+            if var in self._data and self._data[var] != "1":
+                continue
+            var = 'C' + str(c) + '_outdoor_temp_sensor_presence'
+            if var in self._data and self._data[var] == "1":
+                controller.append(str(c))
+        return controller
+    
+    def get_controller_serial(self, controller):
+        var = 'controller' + controller + '_id'
+        if var in self._data:
+            return self._data[var]
+
+    def get_thermostat_serial(self, thermostat):
+        var = thermostat[:2] + '_thermostat' + thermostat[4:] + '_id'
+        if var in self._data:
+            return self._data[var]
 
     def is_heating_active(self, thermostat):
         var = thermostat + '_stat_cb_actuator'
@@ -98,6 +123,31 @@ class UponorStateProxy:
     def get_temperature(self, thermostat):
         var = thermostat + '_room_temperature'
         if var in self._data and int(self._data[var]) <= TOO_HIGH_TEMP_LIMIT:
+            return round((int(self._data[var]) - 320) / 18, 1)
+            
+    def get_outdoor_temperature(self, controller):
+        var = 'C' + controller + '_outdoor_temperature'
+        if var in self._data:
+            return round((int(self._data[var]) - 320) / 18, 1)
+
+    def get_regulation_mode(self, thermostat):
+        var = thermostat + '_regulation_mode'
+        if var in self._data:
+            return self._data[var] == "1"
+
+    def get_floor_temperature(self, thermostat):
+        var = thermostat + '_external_temperature'
+        if var in self._data:
+            return round((int(self._data[var]) - 320) / 18, 1)
+            
+    def get_min_floor_temperature(self, thermostat):
+        var = thermostat + '_minimum_floor_setpoint'
+        if var in self._data:
+            return round((int(self._data[var]) - 320) / 18, 1)
+            
+    def get_max_floor_temperature(self, thermostat):
+        var = thermostat + '_maximum_floor_setpoint'
+        if var in self._data:
             return round((int(self._data[var]) - 320) / 18,1)
 
     def get_min_limit(self, thermostat):
